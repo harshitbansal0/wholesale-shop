@@ -75,7 +75,7 @@ export async function GET(request: Request) {
     const recentSales = await Bill.find(dateFilter)
       .sort({ date: -1, createdAt: -1 })
       .limit(20)
-      .select("billNumber date customerName grandTotal payment.totalPaid dueAmount")
+      .select("billNumber date customerId customerName grandTotal payment.totalPaid dueAmount")
       .lean();
 
     const summary = totals[0] || { totalSales: 0, totalReceived: 0, totalDue: 0 };

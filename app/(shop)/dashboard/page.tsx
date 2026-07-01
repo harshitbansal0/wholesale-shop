@@ -40,8 +40,9 @@ import {
   endOfYear,
   isSameDay,
 } from "date-fns";
-import { CalendarDays } from "lucide-react";
+import { CalendarDays, IndianRupee } from "lucide-react";
 import type { DateRange } from "react-day-picker";
+import { RecordPaymentDialog } from "@/components/record-payment-dialog";
 
 interface DashboardData {
   chartData: { _id: string; totalSales: number; count: number }[];
@@ -55,6 +56,7 @@ interface DashboardData {
     _id: string;
     billNumber: string;
     date: string;
+    customerId: string;
     customerName: string;
     grandTotal: number;
     payment: { totalPaid: number };
@@ -112,6 +114,12 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+
+  const [paymentTarget, setPaymentTarget] = useState<{
+    customerId: string;
+    customerName: string;
+    dueAmount: number;
+  } | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -332,6 +340,7 @@ export default function DashboardPage() {
                   <TableHead className="text-right">Total</TableHead>
                   <TableHead className="text-right">Paid</TableHead>
                   <TableHead className="text-right">Due</TableHead>
+                  <TableHead className="w-16"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -358,11 +367,31 @@ export default function DashboardPage() {
                           <span className="text-green-600">Paid</span>
                         )}
                       </TableCell>
+                      <TableCell>
+                        {sale.dueAmount > 0 && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 gap-1 text-xs"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPaymentTarget({
+                                customerId: sale.customerId,
+                                customerName: sale.customerName,
+                                dueAmount: sale.dueAmount,
+                              });
+                            }}
+                          >
+                            <IndianRupee className="size-3" />
+                            Pay
+                          </Button>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                       No sales in this period
                     </TableCell>
                   </TableRow>
@@ -372,6 +401,17 @@ export default function DashboardPage() {
           </div>
         </CardContent>
       </Card>
+
+      {paymentTarget && (
+        <RecordPaymentDialog
+          open={!!paymentTarget}
+          onOpenChange={(open) => !open && setPaymentTarget(null)}
+          customerId={paymentTarget.customerId}
+          customerName={paymentTarget.customerName}
+          totalDue={paymentTarget.dueAmount}
+          onSuccess={fetchData}
+        />
+      )}
     </div>
   );
 }

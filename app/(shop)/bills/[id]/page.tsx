@@ -22,6 +22,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { format } from "date-fns";
+import { RecordPaymentDialog } from "@/components/record-payment-dialog";
 
 interface Bill {
   _id: string;
@@ -49,21 +50,24 @@ export default function BillViewPage() {
   const [loading, setLoading] = useState(true);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [paymentOpen, setPaymentOpen] = useState(false);
+
+  async function fetchBill() {
+    try {
+      const res = await fetch(`/api/bills/${id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setBill(data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch bill:", error);
+    }
+    setLoading(false);
+  }
 
   useEffect(() => {
-    async function fetchBill() {
-      try {
-        const res = await fetch(`/api/bills/${id}`);
-        if (res.ok) {
-          const data = await res.json();
-          setBill(data);
-        }
-      } catch (error) {
-        console.error("Failed to fetch bill:", error);
-      }
-      setLoading(false);
-    }
     fetchBill();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   async function handleDelete() {
@@ -101,6 +105,11 @@ export default function BillViewPage() {
           <Button variant="outline" onClick={() => router.back()}>
             Back
           </Button>
+          {bill.dueAmount > 0 && (
+            <Button variant="outline" onClick={() => setPaymentOpen(true)}>
+              Record Payment
+            </Button>
+          )}
           <Button variant="outline" onClick={() => router.push(`/bills/${id}/edit`)}>
             Edit
           </Button>
@@ -240,6 +249,15 @@ export default function BillViewPage() {
           </CardContent>
         </Card>
       </div>
+
+      <RecordPaymentDialog
+        open={paymentOpen}
+        onOpenChange={setPaymentOpen}
+        customerId={bill.customerId}
+        customerName={bill.customerName}
+        totalDue={bill.dueAmount}
+        onSuccess={fetchBill}
+      />
     </div>
   );
 }

@@ -5,7 +5,6 @@ import { useParams, useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -22,15 +21,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { format } from "date-fns";
+import { RecordPaymentDialog } from "@/components/record-payment-dialog";
 
 interface Customer {
   _id: string;
@@ -66,10 +59,6 @@ export default function CustomerProfilePage() {
   const [billSearch, setBillSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [paymentOpen, setPaymentOpen] = useState(false);
-  const [paymentAmount, setPaymentAmount] = useState("");
-  const [paymentType, setPaymentType] = useState<"cash" | "self" | "shop">("cash");
-  const [paymentNote, setPaymentNote] = useState("");
-  const [paymentLoading, setPaymentLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -89,33 +78,6 @@ export default function CustomerProfilePage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
-
-  async function handlePayment() {
-    if (!paymentAmount || parseFloat(paymentAmount) <= 0) return;
-
-    setPaymentLoading(true);
-    try {
-      const res = await fetch(`/api/customers/${id}/payments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amount: parseFloat(paymentAmount),
-          type: paymentType,
-          note: paymentNote,
-        }),
-      });
-
-      if (res.ok) {
-        setPaymentOpen(false);
-        setPaymentAmount("");
-        setPaymentNote("");
-        fetchData();
-      }
-    } catch (error) {
-      console.error("Payment failed:", error);
-    }
-    setPaymentLoading(false);
-  }
 
   if (loading && !customer) {
     return <div className="flex items-center justify-center h-64">Loading...</div>;
@@ -184,52 +146,17 @@ export default function CustomerProfilePage() {
                 {formatCurrency(customer.totalDue)}
               </span>
             </div>
-            <Dialog open={paymentOpen} onOpenChange={setPaymentOpen}>
-              <DialogTrigger render={<Button className="w-full mt-2" disabled={customer.totalDue <= 0} />}>
-                Record Payment
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Record Payment</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div>
-                    <Label>Amount (₹)</Label>
-                    <Input
-                      type="number"
-                      value={paymentAmount}
-                      onChange={(e) => setPaymentAmount(e.target.value)}
-                      placeholder="Enter amount"
-                      min="1"
-                    />
-                  </div>
-                  <div>
-                    <Label>Payment Type</Label>
-                    <Select value={paymentType} onValueChange={(v) => v && setPaymentType(v as "cash" | "self" | "shop")}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="cash">Cash</SelectItem>
-                        <SelectItem value="self">Self (UPI/Phone)</SelectItem>
-                        <SelectItem value="shop">Shop (Bank Account)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Note (optional)</Label>
-                    <Input
-                      value={paymentNote}
-                      onChange={(e) => setPaymentNote(e.target.value)}
-                      placeholder="e.g., Partial payment for BILL-005"
-                    />
-                  </div>
-                  <Button onClick={handlePayment} disabled={paymentLoading} className="w-full">
-                    {paymentLoading ? "Processing..." : "Save Payment"}
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
+            <Button className="w-full mt-2" disabled={customer.totalDue <= 0} onClick={() => setPaymentOpen(true)}>
+              Record Payment
+            </Button>
+            <RecordPaymentDialog
+              open={paymentOpen}
+              onOpenChange={setPaymentOpen}
+              customerId={customer._id}
+              customerName={customer.name}
+              totalDue={customer.totalDue}
+              onSuccess={fetchData}
+            />
           </CardContent>
         </Card>
       </div>

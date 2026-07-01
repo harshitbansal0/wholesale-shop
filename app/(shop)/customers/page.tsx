@@ -20,6 +20,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { RecordPaymentDialog } from "@/components/record-payment-dialog";
+import { IndianRupee } from "lucide-react";
 
 interface Customer {
   _id: string;
@@ -40,6 +42,11 @@ export default function CustomersPage() {
   const [sort, setSort] = useState("recent");
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const [paymentTarget, setPaymentTarget] = useState<{
+    id: string;
+    name: string;
+    totalDue: number;
+  } | null>(null);
 
   const fetchCustomers = useCallback(async () => {
     setLoading(true);
@@ -93,12 +100,13 @@ export default function CustomersPage() {
                   <TableHead className="text-right">Total Purchase</TableHead>
                   <TableHead className="text-right">Total Paid</TableHead>
                   <TableHead className="text-right">Total Due</TableHead>
+                  <TableHead className="w-16"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8">
+                    <TableCell colSpan={6} className="text-center py-8">
                       Loading...
                     </TableCell>
                   </TableRow>
@@ -124,11 +132,31 @@ export default function CustomersPage() {
                           <span className="text-green-600">₹0</span>
                         )}
                       </TableCell>
+                      <TableCell>
+                        {customer.totalDue > 0 && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 gap-1 text-xs"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPaymentTarget({
+                                id: customer._id,
+                                name: customer.name,
+                                totalDue: customer.totalDue,
+                              });
+                            }}
+                          >
+                            <IndianRupee className="size-3" />
+                            Pay
+                          </Button>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                       No customers found
                     </TableCell>
                   </TableRow>
@@ -138,6 +166,17 @@ export default function CustomersPage() {
           </div>
         </CardContent>
       </Card>
+
+      {paymentTarget && (
+        <RecordPaymentDialog
+          open={!!paymentTarget}
+          onOpenChange={(open) => !open && setPaymentTarget(null)}
+          customerId={paymentTarget.id}
+          customerName={paymentTarget.name}
+          totalDue={paymentTarget.totalDue}
+          onSuccess={fetchCustomers}
+        />
+      )}
     </div>
   );
 }
