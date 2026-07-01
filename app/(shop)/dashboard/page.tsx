@@ -11,6 +11,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Separator } from "@/components/ui/separator";
 import { useRouter } from "next/navigation";
 import {
   BarChart,
@@ -21,7 +28,20 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { format } from "date-fns";
+import {
+  format,
+  startOfDay,
+  endOfDay,
+  startOfWeek,
+  endOfWeek,
+  startOfMonth,
+  endOfMonth,
+  startOfYear,
+  endOfYear,
+  isSameDay,
+} from "date-fns";
+import { CalendarDays } from "lucide-react";
+import type { DateRange } from "react-day-picker";
 
 interface DashboardData {
   chartData: { _id: string; totalSales: number; count: number }[];
@@ -42,46 +62,163 @@ interface DashboardData {
   }[];
 }
 
-const periods = [
+const presets = [
   { key: "today", label: "Today" },
   { key: "week", label: "This Week" },
   { key: "month", label: "This Month" },
   { key: "year", label: "This Year" },
-];
+] as const;
+
+type PresetKey = (typeof presets)[number]["key"];
+
+function getPresetRange(key: PresetKey): { from: Date; to: Date } {
+  const now = new Date();
+  switch (key) {
+    case "today":
+      return { from: startOfDay(now), to: endOfDay(now) };
+    case "week":
+      return { from: startOfWeek(now, { weekStartsOn: 1 }), to: endOfWeek(now, { weekStartsOn: 1 }) };
+    case "month":
+      return { from: startOfMonth(now), to: endOfMonth(now) };
+    case "year":
+      return { from: startOfYear(now), to: endOfYear(now) };
+  }
+}
+
+function formatDateLabel(from: Date, to: Date): string {
+  if (isSameDay(from, to)) {
+    return format(from, "dd MMM yyyy");
+  }
+  if (from.getFullYear() === to.getFullYear()) {
+    return `${format(from, "dd MMM")} – ${format(to, "dd MMM yyyy")}`;
+  }
+  return `${format(from, "dd MMM yyyy")} – ${format(to, "dd MMM yyyy")}`;
+}
 
 function formatCurrency(amount: number) {
   return `₹${amount.toLocaleString("en-IN")}`;
 }
 
 export default function DashboardPage() {
+  const now = new Date();
+  const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
+    from: startOfMonth(now),
+    to: endOfMonth(now),
+  });
+  const [activePreset, setActivePreset] = useState<PresetKey | null>("month");
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [calendarRange, setCalendarRange] = useState<DateRange | undefined>(undefined);
+
   const [data, setData] = useState<DashboardData | null>(null);
-  const [period, setPeriod] = useState("month");
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/dashboard?period=${period}`);
+      const params = new URLSearchParams({
+        startDate: dateRange.from.toISOString(),
+        endDate: dateRange.to.toISOString(),
+      });
+      const res = await fetch(`/api/dashboard?${params}`);
       const json = await res.json();
       setData(json);
     } catch (error) {
       console.error("Failed to fetch dashboard data:", error);
     }
     setLoading(false);
-  }, [period]);
+  }, [dateRange]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  if (loading && !data) {
-    return <div className="flex items-center justify-center h-64">Loading...</div>;
+  function selectPreset(key: PresetKey) {
+    setActivePreset(key);
+    setDateRange(getPresetRange(key));
+    setCalendarRange(undefined);
+    setCalendarOpen(false);
+  }
+
+  function handleCalendarSelect(range: DateRange | undefined) {
+    setCalendarRange(range);
+    if (range?.from) {
+      setActivePreset(null);
+      const from = range.from;
+      const to = range.to || range.from;
+      setDateRange({ from, to });
+    }
   }
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Dashboard</h1>
+      {/* Header with date picker */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-2xl font-bold">Dashboard</h1>
+
+        <div className="flex flex-wrap items-center gap-1.5">
+          {presets.map((p) => (
+            <Button
+              key={p.key}
+              variant={activePreset === p.key ? "default" : "outline"}
+              size="sm"
+              onClick={() => selectPreset(p.key)}
+            >
+              {p.label}
+            </Button>
+          ))}
+
+          <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+            <PopoverTrigger
+              render={
+                <Button
+                  variant={activePreset === null ? "default" : "outline"}
+                  size="sm"
+                  className="gap-1.5"
+                />
+              }
+            >
+              <CalendarDays className="size-3.5" />
+              {activePreset === null
+                ? formatDateLabel(dateRange.from, dateRange.to)
+                : "Custom"}
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+              <div className="p-3 pb-1">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                  Pick a date or range
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {presets.map((p) => (
+                    <Button
+                      key={p.key}
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => selectPreset(p.key)}
+                    >
+                      {p.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              <Separator />
+              <Calendar
+                mode="range"
+                selected={calendarRange}
+                onSelect={handleCalendarSelect}
+                numberOfMonths={1}
+                defaultMonth={dateRange.from}
+                disabled={{ after: new Date() }}
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
+      </div>
+
+      <p className="text-sm text-muted-foreground -mt-3">
+        {formatDateLabel(dateRange.from, dateRange.to)}
+      </p>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -92,7 +229,7 @@ export default function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-2xl font-bold tabular-nums">
               {formatCurrency(data?.summary.totalSales || 0)}
             </div>
           </CardContent>
@@ -104,7 +241,7 @@ export default function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">
+            <div className="text-2xl font-bold text-green-600 tabular-nums">
               {formatCurrency(data?.summary.totalReceived || 0)}
             </div>
           </CardContent>
@@ -116,7 +253,7 @@ export default function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">
+            <div className="text-2xl font-bold text-red-600 tabular-nums">
               {formatCurrency(data?.summary.totalDue || 0)}
             </div>
           </CardContent>
@@ -128,7 +265,7 @@ export default function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-2xl font-bold tabular-nums">
               {data?.summary.totalCustomers || 0}
             </div>
           </CardContent>
@@ -138,21 +275,7 @@ export default function DashboardPage() {
       {/* Sales Chart */}
       <Card>
         <CardHeader>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <CardTitle>Sales Analytics</CardTitle>
-            <div className="flex gap-1">
-              {periods.map((p) => (
-                <Button
-                  key={p.key}
-                  variant={period === p.key ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setPeriod(p.key)}
-                >
-                  {p.label}
-                </Button>
-              ))}
-            </div>
-          </div>
+          <CardTitle>Sales Analytics</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="h-[300px]">
@@ -193,10 +316,10 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
 
-      {/* Recent Sales Table */}
+      {/* Sales Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Recent Sales</CardTitle>
+          <CardTitle>Sales</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -222,13 +345,13 @@ export default function DashboardPage() {
                       <TableCell className="font-medium">{sale.billNumber}</TableCell>
                       <TableCell>{format(new Date(sale.date), "dd/MM/yyyy")}</TableCell>
                       <TableCell>{sale.customerName}</TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right tabular-nums">
                         {formatCurrency(sale.grandTotal)}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right tabular-nums">
                         {formatCurrency(sale.payment.totalPaid)}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right tabular-nums">
                         {sale.dueAmount > 0 ? (
                           <span className="text-red-600">{formatCurrency(sale.dueAmount)}</span>
                         ) : (
@@ -240,7 +363,7 @@ export default function DashboardPage() {
                 ) : (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                      No sales yet. Create your first bill!
+                      No sales in this period
                     </TableCell>
                   </TableRow>
                 )}

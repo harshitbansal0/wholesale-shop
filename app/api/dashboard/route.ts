@@ -10,41 +10,44 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const period = searchParams.get("period") || "month";
+    const customStart = searchParams.get("startDate");
+    const customEnd = searchParams.get("endDate");
 
     const now = new Date();
     let startDate: Date;
     let endDate: Date;
 
-    switch (period) {
-      case "today":
-        startDate = startOfDay(now);
-        endDate = endOfDay(now);
-        break;
-      case "week":
-        startDate = startOfWeek(now, { weekStartsOn: 1 });
-        endDate = endOfWeek(now, { weekStartsOn: 1 });
-        break;
-      case "month":
-        startDate = startOfMonth(now);
-        endDate = endOfMonth(now);
-        break;
-      case "year":
-        startDate = startOfYear(now);
-        endDate = endOfYear(now);
-        break;
-      default:
-        startDate = startOfMonth(now);
-        endDate = endOfMonth(now);
+    if (customStart && customEnd) {
+      startDate = startOfDay(new Date(customStart));
+      endDate = endOfDay(new Date(customEnd));
+    } else {
+      switch (period) {
+        case "today":
+          startDate = startOfDay(now);
+          endDate = endOfDay(now);
+          break;
+        case "week":
+          startDate = startOfWeek(now, { weekStartsOn: 1 });
+          endDate = endOfWeek(now, { weekStartsOn: 1 });
+          break;
+        case "month":
+          startDate = startOfMonth(now);
+          endDate = endOfMonth(now);
+          break;
+        case "year":
+          startDate = startOfYear(now);
+          endDate = endOfYear(now);
+          break;
+        default:
+          startDate = startOfMonth(now);
+          endDate = endOfMonth(now);
+      }
     }
 
-    // Sales in period
+    const dateFilter = { deletedAt: null, date: { $gte: startDate, $lte: endDate } };
+
     const salesInPeriod = await Bill.aggregate([
-      {
-        $match: {
-          deletedAt: null,
-          date: { $gte: startDate, $lte: endDate },
-        },
-      },
+      { $match: dateFilter },
       {
         $group: {
           _id: { $dateToString: { format: "%Y-%m-%d", date: "$date" } },
@@ -55,9 +58,8 @@ export async function GET(request: Request) {
       { $sort: { _id: 1 } },
     ]);
 
-    // Summary totals
     const totals = await Bill.aggregate([
-      { $match: { deletedAt: null } },
+      { $match: dateFilter },
       {
         $group: {
           _id: null,
@@ -70,10 +72,9 @@ export async function GET(request: Request) {
 
     const totalCustomers = await Customer.countDocuments({ deletedAt: null });
 
-    // Recent sales (last 10)
-    const recentSales = await Bill.find({ deletedAt: null })
+    const recentSales = await Bill.find(dateFilter)
       .sort({ date: -1, createdAt: -1 })
-      .limit(10)
+      .limit(20)
       .select("billNumber date customerName grandTotal payment.totalPaid dueAmount")
       .lean();
 
