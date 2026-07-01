@@ -73,5 +73,6 @@ const BillSchema = new Schema<IBill>(
 
 BillSchema.index({ date: -1 });
 BillSchema.index({ customerId: 1, date: -1 });
+BillSchema.index({ deletedAt: 1, date: -1 });
 
 export default mongoose.models.Bill || mongoose.model<IBill>("Bill", BillSchema);

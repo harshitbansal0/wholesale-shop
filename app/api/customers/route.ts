@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import Customer from "@/lib/models/Customer";
+import { escapeRegex } from "@/lib/utils";
 
 export async function GET(request: Request) {
   try {
@@ -15,11 +16,12 @@ export async function GET(request: Request) {
     const filter: Record<string, unknown> = { deletedAt: null };
 
     if (search) {
+      const escaped = escapeRegex(search);
       const isPhone = /^\d+$/.test(search);
       if (isPhone) {
-        filter.phone = { $regex: search, $options: "i" };
+        filter.phone = { $regex: escaped, $options: "i" };
       } else {
-        filter.name = { $regex: search, $options: "i" };
+        filter.name = { $regex: escaped, $options: "i" };
       }
     }
 

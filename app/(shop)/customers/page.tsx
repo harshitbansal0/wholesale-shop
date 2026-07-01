@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/table";
 import { RecordPaymentDialog } from "@/components/record-payment-dialog";
 import { IndianRupee } from "lucide-react";
+import { formatCurrency } from "@/lib/utils";
 
 interface Customer {
   _id: string;
@@ -30,10 +31,6 @@ interface Customer {
   totalPurchase: number;
   totalPaid: number;
   totalDue: number;
-}
-
-function formatCurrency(amount: number) {
-  return `₹${amount.toLocaleString("en-IN")}`;
 }
 
 export default function CustomersPage() {
@@ -129,7 +126,7 @@ export default function CustomersPage() {
                         {customer.totalDue > 0 ? (
                           <span className="text-red-600">{formatCurrency(customer.totalDue)}</span>
                         ) : (
-                          <span className="text-green-600">₹0</span>
+                          <span className="text-green-600">{formatCurrency(0)}</span>
                         )}
                       </TableCell>
                       <TableCell>

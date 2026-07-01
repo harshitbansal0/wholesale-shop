@@ -43,6 +43,7 @@ import {
 import { CalendarDays, IndianRupee } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { RecordPaymentDialog } from "@/components/record-payment-dialog";
+import { formatCurrency } from "@/lib/utils";
 
 interface DashboardData {
   chartData: { _id: string; totalSales: number; count: number }[];
@@ -59,9 +60,11 @@ interface DashboardData {
     customerId: string;
     customerName: string;
     grandTotal: number;
+    goodsTotal: number;
     payment: { totalPaid: number };
     dueAmount: number;
   }[];
+  pagination: { page: number; limit: number; total: number; pages: number };
 }
 
 const presets = [
@@ -97,10 +100,6 @@ function formatDateLabel(from: Date, to: Date): string {
   return `${format(from, "dd MMM yyyy")} – ${format(to, "dd MMM yyyy")}`;
 }
 
-function formatCurrency(amount: number) {
-  return `₹${amount.toLocaleString("en-IN")}`;
-}
-
 export default function DashboardPage() {
   const now = new Date();
   const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
@@ -115,6 +114,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
+  const [salesPage, setSalesPage] = useState(1);
+
   const [paymentTarget, setPaymentTarget] = useState<{
     customerId: string;
     customerName: string;
@@ -127,6 +128,8 @@ export default function DashboardPage() {
       const params = new URLSearchParams({
         startDate: format(dateRange.from, "yyyy-MM-dd"),
         endDate: format(dateRange.to, "yyyy-MM-dd"),
+        page: salesPage.toString(),
+        limit: "20",
       });
       const res = await fetch(`/api/dashboard?${params}`);
       const json = await res.json();
@@ -135,7 +138,25 @@ export default function DashboardPage() {
       console.error("Failed to fetch dashboard data:", error);
     }
     setLoading(false);
-  }, [dateRange]);
+  }, [dateRange, salesPage]);
+
+  async function handlePayClick(sale: DashboardData["recentSales"][number]) {
+    try {
+      const res = await fetch(`/api/customers/${sale.customerId}`);
+      const json = await res.json();
+      setPaymentTarget({
+        customerId: sale.customerId,
+        customerName: sale.customerName,
+        dueAmount: json.customer?.totalDue ?? sale.dueAmount,
+      });
+    } catch {
+      setPaymentTarget({
+        customerId: sale.customerId,
+        customerName: sale.customerName,
+        dueAmount: sale.dueAmount,
+      });
+    }
+  }
 
   useEffect(() => {
     fetchData();
@@ -144,6 +165,7 @@ export default function DashboardPage() {
   function selectPreset(key: PresetKey) {
     setActivePreset(key);
     setDateRange(getPresetRange(key));
+    setSalesPage(1);
     setCalendarRange(undefined);
     setCalendarOpen(false);
   }
@@ -155,6 +177,7 @@ export default function DashboardPage() {
       const from = range.from;
       const to = range.to || range.from;
       setDateRange({ from, to });
+      setSalesPage(1);
     }
   }
 
@@ -269,7 +292,7 @@ export default function DashboardPage() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Total Customers
+              All Customers
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -301,7 +324,11 @@ export default function DashboardPage() {
                       }
                     }}
                   />
-                  <YAxis tickFormatter={(val) => `₹${(val / 1000).toFixed(0)}k`} />
+                  <YAxis tickFormatter={(val) => {
+                    if (val >= 100000) return `₹${(val / 100000).toFixed(1)}L`;
+                    if (val >= 1000) return `₹${(val / 1000).toFixed(0)}k`;
+                    return `₹${val}`;
+                  }} />
                   <Tooltip
                     formatter={(value) => [formatCurrency(Number(value)), "Sales"]}
                     labelFormatter={(label) => {
@@ -337,7 +364,7 @@ export default function DashboardPage() {
                   <TableHead>Bill No.</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Customer</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead className="text-right">Goods Total</TableHead>
                   <TableHead className="text-right">Paid</TableHead>
                   <TableHead className="text-right">Due</TableHead>
                   <TableHead className="w-16"></TableHead>
@@ -355,7 +382,7 @@ export default function DashboardPage() {
                       <TableCell>{format(new Date(sale.date), "dd/MM/yyyy")}</TableCell>
                       <TableCell>{sale.customerName}</TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {formatCurrency(sale.grandTotal)}
+                        {formatCurrency(sale.goodsTotal)}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {formatCurrency(sale.payment.totalPaid)}
@@ -375,11 +402,7 @@ export default function DashboardPage() {
                             className="h-7 gap-1 text-xs"
                             onClick={(e) => {
                               e.stopPropagation();
-                              setPaymentTarget({
-                                customerId: sale.customerId,
-                                customerName: sale.customerName,
-                                dueAmount: sale.dueAmount,
-                              });
+                              handlePayClick(sale);
                             }}
                           >
                             <IndianRupee className="size-3" />
@@ -399,6 +422,31 @@ export default function DashboardPage() {
               </TableBody>
             </Table>
           </div>
+          {data?.pagination && data.pagination.pages > 1 && (
+            <div className="flex items-center justify-between pt-4">
+              <p className="text-sm text-muted-foreground">
+                Page {data.pagination.page} of {data.pagination.pages} ({data.pagination.total} bills)
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={salesPage <= 1}
+                  onClick={() => setSalesPage((p) => p - 1)}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={salesPage >= data.pagination.pages}
+                  onClick={() => setSalesPage((p) => p + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

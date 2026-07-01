@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { format } from "date-fns";
 import { RecordPaymentDialog } from "@/components/record-payment-dialog";
+import { formatCurrency } from "@/lib/utils";
 
 interface Bill {
   _id: string;
@@ -39,10 +40,6 @@ interface Bill {
   dueAmount: number;
 }
 
-function formatCurrency(amount: number) {
-  return `₹${amount.toLocaleString("en-IN")}`;
-}
-
 export default function BillViewPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -51,6 +48,19 @@ export default function BillViewPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
+  const [customerDue, setCustomerDue] = useState<number | null>(null);
+
+  async function handlePayClick() {
+    if (!bill) return;
+    try {
+      const res = await fetch(`/api/customers/${bill.customerId}`);
+      const json = await res.json();
+      setCustomerDue(json.customer?.totalDue ?? bill.dueAmount);
+    } catch {
+      setCustomerDue(bill.dueAmount);
+    }
+    setPaymentOpen(true);
+  }
 
   async function fetchBill() {
     try {
@@ -106,7 +116,7 @@ export default function BillViewPage() {
             Back
           </Button>
           {bill.dueAmount > 0 && (
-            <Button variant="outline" onClick={() => setPaymentOpen(true)}>
+            <Button variant="outline" onClick={handlePayClick}>
               Record Payment
             </Button>
           )}
@@ -255,7 +265,7 @@ export default function BillViewPage() {
         onOpenChange={setPaymentOpen}
         customerId={bill.customerId}
         customerName={bill.customerName}
-        totalDue={bill.dueAmount}
+        totalDue={customerDue ?? bill.dueAmount}
         onSuccess={fetchBill}
       />
     </div>

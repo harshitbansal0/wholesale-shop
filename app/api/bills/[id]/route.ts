@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import dbConnect from "@/lib/db";
 import Bill from "@/lib/models/Bill";
 import { recalculateCustomerFinancials } from "@/lib/recalculate";
+import { roundMoney } from "@/lib/utils";
 
 export async function GET(
   request: Request,
@@ -10,6 +12,10 @@ export async function GET(
   try {
     await dbConnect();
     const { id } = await params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return NextResponse.json({ error: "Invalid bill ID" }, { status: 400 });
+    }
 
     const bill = await Bill.findOne({ _id: id, deletedAt: null }).lean();
     if (!bill) {
@@ -30,6 +36,11 @@ export async function PUT(
   try {
     await dbConnect();
     const { id } = await params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return NextResponse.json({ error: "Invalid bill ID" }, { status: 400 });
+    }
+
     const body = await request.json();
 
     const existingBill = await Bill.findOne({ _id: id, deletedAt: null });
@@ -39,24 +50,67 @@ export async function PUT(
 
     const { items, oldBalance, payment } = body;
 
-    // Calculate new totals
-    const goodsTotal = items.reduce((sum: number, item: { amount: number }) => sum + item.amount, 0);
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return NextResponse.json({ error: "At least one item is required" }, { status: 400 });
+    }
+
+    for (const item of items) {
+      if (typeof item.quantity !== "number" || typeof item.rate !== "number" ||
+          isNaN(item.quantity) || isNaN(item.rate)) {
+        return NextResponse.json(
+          { error: "Item quantity and rate must be valid numbers" },
+          { status: 400 }
+        );
+      }
+      if (item.quantity <= 0 || item.rate < 0) {
+        return NextResponse.json(
+          { error: "Item quantity must be positive and rate must be non-negative" },
+          { status: 400 }
+        );
+      }
+    }
+
+    const processedItems = items.map(
+      (item: { description: string; quantity: number; rate: number }, index: number) => ({
+        sNo: index + 1,
+        description: item.description,
+        quantity: item.quantity,
+        rate: item.rate,
+        amount: roundMoney(item.quantity * item.rate),
+      })
+    );
+
+    const goodsTotal = roundMoney(processedItems.reduce((sum: number, item: { amount: number }) => sum + item.amount, 0));
     const finalOldBalance = oldBalance || 0;
-    const grandTotal = goodsTotal + finalOldBalance;
+
+    if (typeof finalOldBalance !== "number" || isNaN(finalOldBalance)) {
+      return NextResponse.json({ error: "Old balance must be a valid number" }, { status: 400 });
+    }
+
+    if (finalOldBalance < 0) {
+      return NextResponse.json({ error: "Old balance cannot be negative" }, { status: 400 });
+    }
+
+    const grandTotal = roundMoney(goodsTotal + finalOldBalance);
 
     const cashPaid = payment?.cash || 0;
     const selfPaid = payment?.self || 0;
     const shopPaid = payment?.shop || 0;
-    const totalPaid = cashPaid + selfPaid + shopPaid;
-    const dueAmount = grandTotal - totalPaid;
 
-    existingBill.items = items.map((item: { description: string; quantity: number; rate: number }, index: number) => ({
-      sNo: index + 1,
-      description: item.description,
-      quantity: item.quantity,
-      rate: item.rate,
-      amount: item.quantity * item.rate,
-    }));
+    if (typeof cashPaid !== "number" || isNaN(cashPaid) ||
+        typeof selfPaid !== "number" || isNaN(selfPaid) ||
+        typeof shopPaid !== "number" || isNaN(shopPaid)) {
+      return NextResponse.json({ error: "Payment amounts must be valid numbers" }, { status: 400 });
+    }
+
+    if (cashPaid < 0 || selfPaid < 0 || shopPaid < 0) {
+      return NextResponse.json({ error: "Payment amounts cannot be negative" }, { status: 400 });
+    }
+
+    const totalPaid = roundMoney(cashPaid + selfPaid + shopPaid);
+    const dueAmount = Math.max(0, roundMoney(grandTotal - totalPaid));
+
+    existingBill.items = processedItems;
     existingBill.goodsTotal = goodsTotal;
     existingBill.oldBalance = finalOldBalance;
     existingBill.grandTotal = grandTotal;
@@ -80,6 +134,10 @@ export async function DELETE(
   try {
     await dbConnect();
     const { id } = await params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return NextResponse.json({ error: "Invalid bill ID" }, { status: 400 });
+    }
 
     const bill = await Bill.findOne({ _id: id, deletedAt: null });
     if (!bill) {

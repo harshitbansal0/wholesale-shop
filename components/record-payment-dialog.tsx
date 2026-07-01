@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { IndianRupee } from "lucide-react";
+import { formatCurrency } from "@/lib/utils";
 
 interface RecordPaymentDialogProps {
   open: boolean;
@@ -26,10 +27,6 @@ interface RecordPaymentDialogProps {
   customerName: string;
   totalDue: number;
   onSuccess: () => void;
-}
-
-function formatCurrency(amount: number) {
-  return `₹${amount.toLocaleString("en-IN")}`;
 }
 
 export function RecordPaymentDialog({

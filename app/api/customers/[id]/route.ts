@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import dbConnect from "@/lib/db";
 import Customer from "@/lib/models/Customer";
 import Bill from "@/lib/models/Bill";
+import { startOfDay, endOfDay } from "date-fns";
+import { escapeRegex } from "@/lib/utils";
 
 export async function GET(
   request: Request,
@@ -10,6 +13,10 @@ export async function GET(
   try {
     await dbConnect();
     const { id } = await params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return NextResponse.json({ error: "Invalid customer ID" }, { status: 400 });
+    }
 
     const customer = await Customer.findOne({ _id: id, deletedAt: null }).lean();
     if (!customer) {
@@ -33,10 +40,20 @@ export async function GET(
     }
 
     if (billSearch) {
-      billFilter.$or = [
-        { billNumber: { $regex: billSearch, $options: "i" } },
-        { date: { $regex: billSearch, $options: "i" } },
-      ];
+      const isDateLike = /^\d{4}-\d{2}-\d{2}$|^\d{2}\/\d{2}\/\d{4}$/.test(billSearch.trim());
+      if (isDateLike) {
+        const dateAttempt = new Date(billSearch);
+        if (!isNaN(dateAttempt.getTime())) {
+          billFilter.date = {
+            $gte: startOfDay(dateAttempt),
+            $lte: endOfDay(dateAttempt),
+          };
+        } else {
+          billFilter.billNumber = { $regex: escapeRegex(billSearch), $options: "i" };
+        }
+      } else {
+        billFilter.billNumber = { $regex: escapeRegex(billSearch), $options: "i" };
+      }
     }
 
     const bills = await Bill.find(billFilter).sort(billSort).lean();
@@ -55,6 +72,11 @@ export async function PUT(
   try {
     await dbConnect();
     const { id } = await params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return NextResponse.json({ error: "Invalid customer ID" }, { status: 400 });
+    }
+
     const body = await request.json();
 
     const customer = await Customer.findOneAndUpdate(
@@ -81,6 +103,10 @@ export async function DELETE(
   try {
     await dbConnect();
     const { id } = await params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return NextResponse.json({ error: "Invalid customer ID" }, { status: 400 });
+    }
 
     const customer = await Customer.findOneAndUpdate(
       { _id: id, deletedAt: null },

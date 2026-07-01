@@ -7,8 +7,8 @@ export async function POST(request: Request) {
   try {
     const { username, password, setupKey } = await request.json();
 
-    // Simple setup protection - change this key before running
-    if (setupKey !== "wholesale-setup-2024") {
+    const expectedKey = process.env.ADMIN_SETUP_KEY;
+    if (!expectedKey || setupKey !== expectedKey) {
       return NextResponse.json({ error: "Invalid setup key" }, { status: 403 });
     }
 

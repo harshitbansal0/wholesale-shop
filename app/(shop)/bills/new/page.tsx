@@ -22,16 +22,13 @@ import {
   Loader2,
   AlertCircle,
 } from "lucide-react";
+import { formatCurrency, roundMoney } from "@/lib/utils";
 
 interface BillItem {
   description: string;
   quantity: number;
   rate: number;
   amount: number;
-}
-
-function formatCurrency(amount: number) {
-  return `₹${amount.toLocaleString("en-IN")}`;
 }
 
 export default function CreateBillPage() {
@@ -57,10 +54,10 @@ export default function CreateBillPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const goodsTotal = items.reduce((sum, item) => sum + item.amount, 0);
-  const grandTotal = goodsTotal + oldBalance;
-  const totalPaid = cashPaid + selfPaid + shopPaid;
-  const dueAmount = grandTotal - totalPaid;
+  const goodsTotal = roundMoney(items.reduce((sum, item) => sum + item.amount, 0));
+  const grandTotal = roundMoney(goodsTotal + oldBalance);
+  const totalPaid = roundMoney(cashPaid + selfPaid + shopPaid);
+  const dueAmount = roundMoney(grandTotal - totalPaid);
 
   const lookupCustomer = useCallback(async (phone: string) => {
     if (phone.length < 10) return;
@@ -95,7 +92,7 @@ export default function CreateBillPage() {
       const numVal = parseFloat(value as string) || 0;
       updated[index][field] = numVal;
       if (field === "quantity" || field === "rate") {
-        updated[index].amount = updated[index].quantity * updated[index].rate;
+        updated[index].amount = roundMoney(updated[index].quantity * updated[index].rate);
       }
     }
     setItems(updated);

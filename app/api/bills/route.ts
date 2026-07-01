@@ -3,6 +3,8 @@ import dbConnect from "@/lib/db";
 import Bill from "@/lib/models/Bill";
 import Customer from "@/lib/models/Customer";
 import { getNextBillNumber } from "@/lib/models/Counter";
+import { recalculateCustomerFinancials } from "@/lib/recalculate";
+import { roundMoney, escapeRegex } from "@/lib/utils";
 
 export async function GET(request: Request) {
   try {
@@ -25,9 +27,10 @@ export async function GET(request: Request) {
     }
 
     if (search) {
+      const escaped = escapeRegex(search);
       filter.$or = [
-        { billNumber: { $regex: search, $options: "i" } },
-        { customerName: { $regex: search, $options: "i" } },
+        { billNumber: { $regex: escaped, $options: "i" } },
+        { customerName: { $regex: escaped, $options: "i" } },
       ];
     }
 
@@ -59,7 +62,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Customer info and items are required" }, { status: 400 });
     }
 
-    // Find or create customer
+    for (const item of items) {
+      if (typeof item.quantity !== "number" || typeof item.rate !== "number" ||
+          isNaN(item.quantity) || isNaN(item.rate)) {
+        return NextResponse.json(
+          { error: "Item quantity and rate must be valid numbers" },
+          { status: 400 }
+        );
+      }
+      if (item.quantity <= 0 || item.rate < 0) {
+        return NextResponse.json(
+          { error: "Item quantity must be positive and rate must be non-negative" },
+          { status: 400 }
+        );
+      }
+    }
+
     let customer = await Customer.findOne({ phone: customerPhone, deletedAt: null });
 
     if (!customer) {
@@ -70,34 +88,55 @@ export async function POST(request: Request) {
       });
     }
 
-    // Calculate totals
-    const goodsTotal = items.reduce((sum: number, item: { amount: number }) => sum + item.amount, 0);
+    const processedItems = items.map(
+      (item: { description: string; quantity: number; rate: number }, index: number) => ({
+        sNo: index + 1,
+        description: item.description,
+        quantity: item.quantity,
+        rate: item.rate,
+        amount: roundMoney(item.quantity * item.rate),
+      })
+    );
+
+    const goodsTotal = roundMoney(processedItems.reduce((sum: number, item: { amount: number }) => sum + item.amount, 0));
     const finalOldBalance = oldBalance || 0;
-    const grandTotal = goodsTotal + finalOldBalance;
+
+    if (typeof finalOldBalance !== "number" || isNaN(finalOldBalance)) {
+      return NextResponse.json({ error: "Old balance must be a valid number" }, { status: 400 });
+    }
+
+    if (finalOldBalance < 0) {
+      return NextResponse.json({ error: "Old balance cannot be negative" }, { status: 400 });
+    }
+
+    const grandTotal = roundMoney(goodsTotal + finalOldBalance);
 
     const cashPaid = payment?.cash || 0;
     const selfPaid = payment?.self || 0;
     const shopPaid = payment?.shop || 0;
-    const totalPaid = cashPaid + selfPaid + shopPaid;
-    const dueAmount = grandTotal - totalPaid;
 
-    // Generate bill number
+    if (typeof cashPaid !== "number" || isNaN(cashPaid) ||
+        typeof selfPaid !== "number" || isNaN(selfPaid) ||
+        typeof shopPaid !== "number" || isNaN(shopPaid)) {
+      return NextResponse.json({ error: "Payment amounts must be valid numbers" }, { status: 400 });
+    }
+
+    if (cashPaid < 0 || selfPaid < 0 || shopPaid < 0) {
+      return NextResponse.json({ error: "Payment amounts cannot be negative" }, { status: 400 });
+    }
+
+    const totalPaid = roundMoney(cashPaid + selfPaid + shopPaid);
+    const dueAmount = Math.max(0, roundMoney(grandTotal - totalPaid));
+
     const billNumber = await getNextBillNumber();
 
-    // Create bill
     const bill = await Bill.create({
       billNumber,
       date: new Date(),
       customerId: customer._id,
       customerName: customer.name,
       customerPhone: customer.phone,
-      items: items.map((item: { description: string; quantity: number; rate: number }, index: number) => ({
-        sNo: index + 1,
-        description: item.description,
-        quantity: item.quantity,
-        rate: item.rate,
-        amount: item.quantity * item.rate,
-      })),
+      items: processedItems,
       goodsTotal,
       oldBalance: finalOldBalance,
       grandTotal,
@@ -105,16 +144,13 @@ export async function POST(request: Request) {
       dueAmount,
     });
 
-    // If this is the customer's first bill, store the entered old balance as their initial balance
     const existingBillCount = await Bill.countDocuments({ customerId: customer._id, deletedAt: null });
-    if (existingBillCount === 1 && finalOldBalance > 0) {
+    if (existingBillCount === 1 && finalOldBalance > 0 && customer.initialBalance === 0) {
       customer.initialBalance = finalOldBalance;
+      await customer.save();
     }
 
-    customer.totalPurchase += goodsTotal;
-    customer.totalPaid += totalPaid;
-    customer.totalDue = customer.initialBalance + customer.totalPurchase - customer.totalPaid;
-    await customer.save();
+    await recalculateCustomerFinancials(customer._id.toString());
 
     return NextResponse.json(bill, { status: 201 });
   } catch (error) {

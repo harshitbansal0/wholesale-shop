@@ -24,6 +24,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { format } from "date-fns";
 import { RecordPaymentDialog } from "@/components/record-payment-dialog";
+import { formatCurrency } from "@/lib/utils";
 
 interface Customer {
   _id: string;
@@ -44,10 +45,6 @@ interface Bill {
   grandTotal: number;
   payment: { cash: number; self: number; shop: number; totalPaid: number };
   dueAmount: number;
-}
-
-function formatCurrency(amount: number) {
-  return `₹${amount.toLocaleString("en-IN")}`;
 }
 
 export default function CustomerProfilePage() {
