@@ -81,7 +81,7 @@ export async function GET(
       .sort({ date: -1 })
       .lean();
 
-    return NextResponse.json(payments);
+    return NextResponse.json({ payments });
   } catch (error) {
     console.error("Payments GET error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

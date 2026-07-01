@@ -80,6 +80,8 @@ export async function GET(request: Request) {
     const standalonePaid = standalonePayments[0]?.total || 0;
 
     const totalCustomers = await Customer.countDocuments({ deletedAt: null });
+    const activeCustomerIds = await Bill.distinct("customerId", dateFilter);
+    const activeCustomers = activeCustomerIds.length;
 
     const totalBills = await Bill.countDocuments(dateFilter);
     const recentSales = await Bill.find(dateFilter)
@@ -98,6 +100,7 @@ export async function GET(request: Request) {
         totalReceived: summary.totalReceived + standalonePaid,
         totalDue: Math.max(0, summary.totalDue - standalonePaid),
         totalCustomers,
+        activeCustomers,
       },
       recentSales,
       pagination: { page, limit, total: totalBills, pages: Math.ceil(totalBills / limit) },

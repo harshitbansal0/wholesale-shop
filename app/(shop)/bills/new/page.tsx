@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -8,8 +8,11 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { PageHeader } from "@/components/page-header";
+import { StickyActionBar } from "@/components/sticky-action-bar";
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
+import { toast } from "sonner";
 import {
-  ArrowLeft,
   Plus,
   Trash2,
   UserCheck,
@@ -33,6 +36,7 @@ interface BillItem {
 
 export default function CreateBillPage() {
   const router = useRouter();
+  const phoneRef = useRef<HTMLInputElement>(null);
 
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerName, setCustomerName] = useState("");
@@ -53,6 +57,9 @@ export default function CreateBillPage() {
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const isDirty = customerPhone.length > 0 || items.some((i) => i.description.length > 0);
+  useUnsavedChanges(isDirty);
 
   const goodsTotal = roundMoney(items.reduce((sum, item) => sum + item.amount, 0));
   const grandTotal = roundMoney(goodsTotal + oldBalance);
@@ -78,8 +85,8 @@ export default function CreateBillPage() {
         setIsExistingCustomer(false);
       }
       setCustomerLookupDone(true);
-    } catch (error) {
-      console.error("Lookup failed:", error);
+    } catch {
+      toast.error("Failed to look up customer");
     }
     setLookingUp(false);
   }, []);
@@ -105,6 +112,13 @@ export default function CreateBillPage() {
   function removeItem(index: number) {
     if (items.length === 1) return;
     setItems(items.filter((_, i) => i !== index));
+  }
+
+  function handleItemKeyDown(e: React.KeyboardEvent, index: number, field: string) {
+    if (e.key === "Enter" && index === items.length - 1 && field === "rate") {
+      e.preventDefault();
+      addItem();
+    }
   }
 
   async function handleSave() {
@@ -138,32 +152,27 @@ export default function CreateBillPage() {
 
       if (res.ok) {
         const bill = await res.json();
+        toast.success("Bill created successfully");
         router.push(`/bills/${bill._id}`);
       } else {
         const errData = await res.json();
         setError(errData.error || "Failed to save bill");
       }
-    } catch (err) {
+    } catch {
       setError("Network error. Please try again.");
-      console.error(err);
     }
     setSaving(false);
   }
 
   return (
     <div className="max-w-4xl mx-auto pb-24">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <Button variant="ghost" size="icon" onClick={() => router.back()}>
-          <ArrowLeft className="size-5" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">New Bill</h1>
-          <p className="text-sm text-muted-foreground">Create a new bill for a customer</p>
-        </div>
-      </div>
+      <PageHeader
+        title="New Bill"
+        subtitle="Create a new bill for a customer"
+        backHref
+      />
 
-      <div className="space-y-5">
+      <div className="space-y-5 mt-6">
         {/* Customer Info */}
         <Card>
           <CardContent className="pt-6">
@@ -171,7 +180,7 @@ export default function CreateBillPage() {
               <Phone className="size-4 text-muted-foreground" />
               <h2 className="font-semibold">Customer</h2>
               {customerLookupDone && isExistingCustomer && (
-                <Badge variant="secondary" className="ml-auto gap-1 text-green-700 bg-green-50 border-green-200">
+                <Badge variant="secondary" className="ml-auto gap-1 text-emerald-700 bg-emerald-50 border-emerald-200">
                   <UserCheck className="size-3" />
                   Existing
                 </Badge>
@@ -191,8 +200,10 @@ export default function CreateBillPage() {
                 </Label>
                 <div className="relative">
                   <Input
+                    ref={phoneRef}
                     id="phone"
                     type="tel"
+                    inputMode="tel"
                     value={customerPhone}
                     onChange={(e) => {
                       setCustomerPhone(e.target.value);
@@ -201,6 +212,7 @@ export default function CreateBillPage() {
                     onBlur={() => lookupCustomer(customerPhone)}
                     placeholder="10-digit number"
                     className="h-10"
+                    autoFocus
                   />
                   {lookingUp && (
                     <Loader2 className="absolute right-2.5 top-2.5 size-4 animate-spin text-muted-foreground" />
@@ -253,7 +265,6 @@ export default function CreateBillPage() {
             </div>
 
             <div className="space-y-3">
-              {/* Column headers - desktop */}
               <div className="hidden sm:grid sm:grid-cols-[1fr_5rem_6rem_6rem_2rem] gap-2 px-1">
                 <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Description</span>
                 <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Qty</span>
@@ -283,6 +294,7 @@ export default function CreateBillPage() {
                       value={item.quantity || ""}
                       onChange={(e) => updateItem(index, "quantity", e.target.value)}
                       min="1"
+                      inputMode="numeric"
                       className="h-10 sm:h-9"
                     />
                   </div>
@@ -292,7 +304,9 @@ export default function CreateBillPage() {
                       type="number"
                       value={item.rate || ""}
                       onChange={(e) => updateItem(index, "rate", e.target.value)}
+                      onKeyDown={(e) => handleItemKeyDown(e, index, "rate")}
                       min="0"
+                      inputMode="decimal"
                       className="h-10 sm:h-9"
                     />
                   </div>
@@ -309,6 +323,7 @@ export default function CreateBillPage() {
                       onClick={() => removeItem(index)}
                       disabled={items.length === 1}
                       className="size-8 text-muted-foreground hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity max-sm:opacity-100"
+                      aria-label={`Remove item ${index + 1}`}
                     >
                       <Trash2 className="size-3.5" />
                     </Button>
@@ -330,7 +345,6 @@ export default function CreateBillPage() {
 
         {/* Summary & Payment */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {/* Bill Summary */}
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center gap-2 mb-4">
@@ -348,6 +362,7 @@ export default function CreateBillPage() {
                     value={oldBalance || ""}
                     onChange={(e) => setOldBalance(parseFloat(e.target.value) || 0)}
                     min="0"
+                    inputMode="decimal"
                     className="h-10"
                     placeholder="₹0"
                   />
@@ -377,7 +392,6 @@ export default function CreateBillPage() {
             </CardContent>
           </Card>
 
-          {/* Payment */}
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center gap-2 mb-4">
@@ -395,13 +409,17 @@ export default function CreateBillPage() {
                       value={cashPaid || ""}
                       onChange={(e) => setCashPaid(parseFloat(e.target.value) || 0)}
                       min="0"
+                      inputMode="decimal"
                       placeholder="0"
                       className="h-10 pl-8"
                     />
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Self</Label>
+                  <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    Self
+                    <span className="ml-1 text-muted-foreground font-normal normal-case tracking-normal">(UPI / Phone)</span>
+                  </Label>
                   <div className="relative">
                     <IndianRupee className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
                     <Input
@@ -409,13 +427,17 @@ export default function CreateBillPage() {
                       value={selfPaid || ""}
                       onChange={(e) => setSelfPaid(parseFloat(e.target.value) || 0)}
                       min="0"
+                      inputMode="decimal"
                       placeholder="0"
                       className="h-10 pl-8"
                     />
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Shop</Label>
+                  <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    Shop
+                    <span className="ml-1 text-muted-foreground font-normal normal-case tracking-normal">(Bank Account)</span>
+                  </Label>
                   <div className="relative">
                     <IndianRupee className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
                     <Input
@@ -423,6 +445,7 @@ export default function CreateBillPage() {
                       value={shopPaid || ""}
                       onChange={(e) => setShopPaid(parseFloat(e.target.value) || 0)}
                       min="0"
+                      inputMode="decimal"
                       placeholder="0"
                       className="h-10 pl-8"
                     />
@@ -434,11 +457,11 @@ export default function CreateBillPage() {
                 <div className="space-y-2 pt-1">
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Total Paid</span>
-                    <span className="font-medium tabular-nums text-green-600">{formatCurrency(totalPaid)}</span>
+                    <span className="font-medium tabular-nums text-emerald-600">{formatCurrency(totalPaid)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="font-bold">Due Amount</span>
-                    <span className={`text-lg font-bold tabular-nums ${dueAmount > 0 ? "text-red-600" : "text-green-600"}`}>
+                    <span className={`text-lg font-bold tabular-nums ${dueAmount > 0 ? "text-red-600" : "text-emerald-600"}`}>
                       {formatCurrency(dueAmount)}
                     </span>
                   </div>
@@ -449,40 +472,35 @@ export default function CreateBillPage() {
         </div>
       </div>
 
-      {/* Sticky bottom bar */}
-      <div className="fixed bottom-0 left-0 right-0 lg:left-64 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 z-30">
-        <div className="max-w-4xl mx-auto flex items-center justify-between px-4 py-3 sm:px-6">
-          <div className="hidden sm:block">
-            {grandTotal > 0 && (
-              <p className="text-sm text-muted-foreground">
-                Grand Total: <span className="font-semibold text-foreground">{formatCurrency(grandTotal)}</span>
-                {dueAmount > 0 && (
-                  <span className="text-red-600 ml-2">Due: {formatCurrency(dueAmount)}</span>
-                )}
-              </p>
-            )}
-          </div>
-          <div className="flex items-center gap-3 ml-auto">
-            <Button variant="outline" onClick={() => router.back()}>
-              Cancel
-            </Button>
-            <Button onClick={handleSave} disabled={saving} className="min-w-[120px]">
-              {saving ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                "Save Bill"
+      <StickyActionBar
+        summary={
+          grandTotal > 0 ? (
+            <>
+              Grand Total: <span className="font-semibold text-foreground">{formatCurrency(grandTotal)}</span>
+              {dueAmount > 0 && (
+                <span className="text-red-600 ml-2">Due: {formatCurrency(dueAmount)}</span>
               )}
-            </Button>
-          </div>
-        </div>
-      </div>
+            </>
+          ) : null
+        }
+      >
+        <Button variant="outline" onClick={() => router.back()}>
+          Cancel
+        </Button>
+        <Button onClick={handleSave} disabled={saving} className="min-w-[120px]">
+          {saving ? (
+            <>
+              <Loader2 className="size-4 animate-spin" />
+              Saving...
+            </>
+          ) : (
+            "Save Bill"
+          )}
+        </Button>
+      </StickyActionBar>
 
-      {/* Error toast */}
       {error && (
-        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 shadow-lg animate-in slide-in-from-bottom-4">
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 shadow-lg animate-in slide-in-from-bottom-4" role="alert">
           <AlertCircle className="size-4 shrink-0" />
           {error}
         </div>
