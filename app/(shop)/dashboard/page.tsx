@@ -117,8 +117,8 @@ export default function DashboardPage() {
     setLoading(true);
     try {
       const params = new URLSearchParams({
-        startDate: dateRange.from.toISOString(),
-        endDate: dateRange.to.toISOString(),
+        startDate: format(dateRange.from, "yyyy-MM-dd"),
+        endDate: format(dateRange.to, "yyyy-MM-dd"),
       });
       const res = await fetch(`/api/dashboard?${params}`);
       const json = await res.json();

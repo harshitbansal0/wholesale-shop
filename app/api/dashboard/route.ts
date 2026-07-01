@@ -18,8 +18,8 @@ export async function GET(request: Request) {
     let endDate: Date;
 
     if (customStart && customEnd) {
-      startDate = startOfDay(new Date(customStart));
-      endDate = endOfDay(new Date(customEnd));
+      startDate = new Date(customStart + "T00:00:00.000Z");
+      endDate = new Date(customEnd + "T23:59:59.999Z");
     } else {
       switch (period) {
         case "today":
