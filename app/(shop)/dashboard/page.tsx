@@ -100,10 +100,11 @@ function formatDateLabel(from: Date, to: Date): string {
   return `${format(from, "dd MMM yyyy")} – ${format(to, "dd MMM yyyy")}`;
 }
 
-function Skeleton({ className }: { className?: string }) {
+function Skeleton({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
     <div
       className={`animate-pulse rounded-md bg-muted ${className || ""}`}
+      style={style}
     />
   );
 }
