@@ -36,9 +36,8 @@ export async function POST(
       note: note || "",
     });
 
-    // Update customer totals
     customer.totalPaid += amount;
-    customer.totalDue = customer.totalPurchase - customer.totalPaid;
+    customer.totalDue = customer.initialBalance + customer.totalPurchase - customer.totalPaid;
     await customer.save();
 
     return NextResponse.json({ message: "Payment recorded", customer });

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import Bill from "@/lib/models/Bill";
-import Customer from "@/lib/models/Customer";
+import { recalculateCustomerFinancials } from "@/lib/recalculate";
 
 export async function GET(
   request: Request,
@@ -50,11 +50,6 @@ export async function PUT(
     const totalPaid = cashPaid + selfPaid + shopPaid;
     const dueAmount = grandTotal - totalPaid;
 
-    // Calculate diffs for customer update
-    const oldGoodsTotal = existingBill.goodsTotal;
-    const oldTotalPaid = existingBill.payment.totalPaid;
-
-    // Update bill
     existingBill.items = items.map((item: { description: string; quantity: number; rate: number }, index: number) => ({
       sNo: index + 1,
       description: item.description,
@@ -69,13 +64,7 @@ export async function PUT(
     existingBill.dueAmount = dueAmount;
     await existingBill.save();
 
-    // Update customer financials (diff-based)
-    const purchaseDiff = goodsTotal - oldGoodsTotal;
-    const paidDiff = totalPaid - oldTotalPaid;
-
-    await Customer.findByIdAndUpdate(existingBill.customerId, {
-      $inc: { totalPurchase: purchaseDiff, totalPaid: paidDiff, totalDue: purchaseDiff - paidDiff },
-    });
+    await recalculateCustomerFinancials(existingBill.customerId.toString());
 
     return NextResponse.json(existingBill);
   } catch (error) {
@@ -97,18 +86,10 @@ export async function DELETE(
       return NextResponse.json({ error: "Bill not found" }, { status: 404 });
     }
 
-    // Soft delete
     bill.deletedAt = new Date();
     await bill.save();
 
-    // Reverse customer financials
-    await Customer.findByIdAndUpdate(bill.customerId, {
-      $inc: {
-        totalPurchase: -bill.goodsTotal,
-        totalPaid: -bill.payment.totalPaid,
-        totalDue: -(bill.goodsTotal - bill.payment.totalPaid),
-      },
-    });
+    await recalculateCustomerFinancials(bill.customerId.toString());
 
     return NextResponse.json({ message: "Bill deleted" });
   } catch (error) {

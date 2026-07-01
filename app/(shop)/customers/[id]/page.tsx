@@ -37,6 +37,7 @@ interface Customer {
   name: string;
   phone: string;
   address: string;
+  initialBalance: number;
   totalPurchase: number;
   totalPaid: number;
   totalDue: number;
@@ -46,6 +47,7 @@ interface Bill {
   _id: string;
   billNumber: string;
   date: string;
+  goodsTotal: number;
   grandTotal: number;
   payment: { cash: number; self: number; shop: number; totalPaid: number };
   dueAmount: number;
@@ -159,6 +161,12 @@ export default function CustomerProfilePage() {
             <CardTitle className="text-lg">Financial Summary</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
+            {customer.initialBalance > 0 && (
+              <div className="flex justify-between">
+                <span className="text-sm text-muted-foreground">Old Balance (Initial)</span>
+                <span className="font-medium">{formatCurrency(customer.initialBalance)}</span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span className="text-sm text-muted-foreground">Total Purchase</span>
               <span className="font-medium">{formatCurrency(customer.totalPurchase)}</span>
@@ -172,7 +180,7 @@ export default function CustomerProfilePage() {
             <Separator />
             <div className="flex justify-between">
               <span className="text-sm font-medium">Outstanding Due</span>
-              <span className="font-bold text-red-600">
+              <span className={`font-bold ${customer.totalDue > 0 ? "text-red-600" : "text-green-600"}`}>
                 {formatCurrency(customer.totalDue)}
               </span>
             </div>
@@ -261,7 +269,7 @@ export default function CustomerProfilePage() {
                 <TableRow>
                   <TableHead>Bill No.</TableHead>
                   <TableHead>Date</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead className="text-right">Goods Total</TableHead>
                   <TableHead>Payment</TableHead>
                   <TableHead className="text-right">Paid</TableHead>
                   <TableHead className="text-right">Due</TableHead>
@@ -278,7 +286,7 @@ export default function CustomerProfilePage() {
                       <TableCell className="font-medium">{bill.billNumber}</TableCell>
                       <TableCell>{format(new Date(bill.date), "dd/MM/yyyy")}</TableCell>
                       <TableCell className="text-right">
-                        {formatCurrency(bill.grandTotal)}
+                        {formatCurrency(bill.goodsTotal)}
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-1 flex-wrap">

@@ -105,10 +105,15 @@ export async function POST(request: Request) {
       dueAmount,
     });
 
-    // Update customer financials
+    // If this is the customer's first bill, store the entered old balance as their initial balance
+    const existingBillCount = await Bill.countDocuments({ customerId: customer._id, deletedAt: null });
+    if (existingBillCount === 1 && finalOldBalance > 0) {
+      customer.initialBalance = finalOldBalance;
+    }
+
     customer.totalPurchase += goodsTotal;
     customer.totalPaid += totalPaid;
-    customer.totalDue = customer.totalPurchase - customer.totalPaid;
+    customer.totalDue = customer.initialBalance + customer.totalPurchase - customer.totalPaid;
     await customer.save();
 
     return NextResponse.json(bill, { status: 201 });
