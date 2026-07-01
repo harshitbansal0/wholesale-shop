@@ -100,6 +100,14 @@ function formatDateLabel(from: Date, to: Date): string {
   return `${format(from, "dd MMM yyyy")} – ${format(to, "dd MMM yyyy")}`;
 }
 
+function Skeleton({ className }: { className?: string }) {
+  return (
+    <div
+      className={`animate-pulse rounded-md bg-muted ${className || ""}`}
+    />
+  );
+}
+
 export default function DashboardPage() {
   const now = new Date();
   const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
@@ -253,54 +261,36 @@ export default function DashboardPage() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Total Sales
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold tabular-nums">
-              {formatCurrency(data?.summary.totalSales || 0)}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Amount Received
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600 tabular-nums">
-              {formatCurrency(data?.summary.totalReceived || 0)}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Outstanding Due
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600 tabular-nums">
-              {formatCurrency(data?.summary.totalDue || 0)}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              All Customers
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold tabular-nums">
-              {data?.summary.totalCustomers || 0}
-            </div>
-          </CardContent>
-        </Card>
+        {loading
+          ? Array.from({ length: 4 }).map((_, i) => (
+              <Card key={i}>
+                <CardHeader className="pb-2">
+                  <Skeleton className="h-4 w-24" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-8 w-32" />
+                </CardContent>
+              </Card>
+            ))
+          : [
+              { label: "Total Sales", value: formatCurrency(data?.summary.totalSales || 0), color: "" },
+              { label: "Amount Received", value: formatCurrency(data?.summary.totalReceived || 0), color: "text-green-600" },
+              { label: "Outstanding Due", value: formatCurrency(data?.summary.totalDue || 0), color: "text-red-600" },
+              { label: "All Customers", value: String(data?.summary.totalCustomers || 0), color: "" },
+            ].map((card) => (
+              <Card key={card.label}>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    {card.label}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className={`text-2xl font-bold tabular-nums ${card.color}`}>
+                    {card.value}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
       </div>
 
       {/* Sales Chart */}
@@ -310,7 +300,17 @@ export default function DashboardPage() {
         </CardHeader>
         <CardContent>
           <div className="h-[300px]">
-            {data?.chartData && data.chartData.length > 0 ? (
+            {loading ? (
+              <div className="flex items-end gap-2 h-full px-4 pb-6">
+                {Array.from({ length: 10 }).map((_, i) => (
+                  <Skeleton
+                    key={i}
+                    className="flex-1"
+                    style={{ height: `${20 + Math.random() * 60}%` }}
+                  />
+                ))}
+              </div>
+            ) : data?.chartData && data.chartData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data.chartData}>
                   <CartesianGrid strokeDasharray="3 3" />
@@ -371,58 +371,70 @@ export default function DashboardPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data?.recentSales && data.recentSales.length > 0 ? (
-                  data.recentSales.map((sale) => (
-                    <TableRow
-                      key={sale._id}
-                      className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => router.push(`/bills/${sale._id}`)}
-                    >
-                      <TableCell className="font-medium">{sale.billNumber}</TableCell>
-                      <TableCell>{format(new Date(sale.date), "dd/MM/yyyy")}</TableCell>
-                      <TableCell>{sale.customerName}</TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {formatCurrency(sale.goodsTotal)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {formatCurrency(sale.payment.totalPaid)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {sale.dueAmount > 0 ? (
-                          <span className="text-red-600">{formatCurrency(sale.dueAmount)}</span>
-                        ) : (
-                          <span className="text-green-600">Paid</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {sale.dueAmount > 0 && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 gap-1 text-xs"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handlePayClick(sale);
-                            }}
-                          >
-                            <IndianRupee className="size-3" />
-                            Pay
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                      No sales in this period
-                    </TableCell>
-                  </TableRow>
-                )}
+                {loading
+                  ? Array.from({ length: 5 }).map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+                        <TableCell className="text-right"><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
+                        <TableCell className="text-right"><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
+                        <TableCell className="text-right"><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
+                        <TableCell><Skeleton className="h-6 w-12" /></TableCell>
+                      </TableRow>
+                    ))
+                  : data?.recentSales && data.recentSales.length > 0
+                    ? data.recentSales.map((sale) => (
+                        <TableRow
+                          key={sale._id}
+                          className="cursor-pointer hover:bg-muted/50"
+                          onClick={() => router.push(`/bills/${sale._id}`)}
+                        >
+                          <TableCell className="font-medium">{sale.billNumber}</TableCell>
+                          <TableCell>{format(new Date(sale.date), "dd/MM/yyyy")}</TableCell>
+                          <TableCell>{sale.customerName}</TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {formatCurrency(sale.goodsTotal)}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {formatCurrency(sale.payment.totalPaid)}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {sale.dueAmount > 0 ? (
+                              <span className="text-red-600">{formatCurrency(sale.dueAmount)}</span>
+                            ) : (
+                              <span className="text-green-600">Paid</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {sale.dueAmount > 0 && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 gap-1 text-xs"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handlePayClick(sale);
+                                }}
+                              >
+                                <IndianRupee className="size-3" />
+                                Pay
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    : (
+                        <TableRow>
+                          <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                            No sales in this period
+                          </TableCell>
+                        </TableRow>
+                      )}
               </TableBody>
             </Table>
           </div>
-          {data?.pagination && data.pagination.pages > 1 && (
+          {!loading && data?.pagination && data.pagination.pages > 1 && (
             <div className="flex items-center justify-between pt-4">
               <p className="text-sm text-muted-foreground">
                 Page {data.pagination.page} of {data.pagination.pages} ({data.pagination.total} bills)
