@@ -46,14 +46,16 @@ export function SkeletonTableRows({ rows = 5, cols = 6 }: { rows?: number; cols?
   );
 }
 
+const chartBarHeights = [45, 65, 35, 70, 50, 80, 40, 55, 72, 60];
+
 export function SkeletonChart() {
   return (
     <div className="flex items-end gap-2 h-full px-4 pb-6">
-      {Array.from({ length: 10 }).map((_, i) => (
+      {chartBarHeights.map((h, i) => (
         <Skeleton
           key={i}
           className="flex-1"
-          style={{ height: `${20 + Math.random() * 60}%` }}
+          style={{ height: `${h}%` }}
         />
       ))}
     </div>
